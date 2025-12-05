@@ -1,4 +1,4 @@
-// jealleal: переписал некоторые функции, т.к был бэкдор
+// jealleal:
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, deleteUser } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, limit, doc, updateDoc, getDoc, setDoc, deleteDoc, where } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
@@ -27,22 +27,62 @@ const DEFAULT_PROFILE_AVATAR = 'https://static.photos/people/320x320/2';
 
 let currentUser = null;
 let currentUserData = null;
+let postsSnapshot = null;
 
-function showToast(msg) {
+function showToast(msg, type = 'info') {
     const container = document.getElementById('toast-container');
+
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `<i data-feather="info" class="w-4 h-4"></i>${msg}`;
+    
+    let icon = 'info';
+    let iconColor = '#c4b5fd';
+    
+    switch(type) {
+        case 'success':
+            icon = 'check-circle';
+            iconColor = '#10b981';
+            break;
+        case 'warning':
+            icon = 'alert-triangle';
+            iconColor = '#f59e0b';
+            break;
+        case 'error':
+            icon = 'x-circle';
+            iconColor = '#ef4444';
+            break;
+        default:
+            icon = 'info';
+            iconColor = '#c4b5fd';
+    }
+    
+    toast.innerHTML = `
+        <i data-feather="${icon}" class="w-4 h-4" style="color: ${iconColor}"></i>
+        <span>${msg}</span>
+    `;
     
     container.appendChild(toast);
-    
+
     feather.replace();
     
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => {
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+    
+    const removeToast = () => {
         toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+        setTimeout(() => {
+            if (toast.parentNode === container) {
+                container.removeChild(toast);
+            }
+        }, 500);
+    };
+    
+    setTimeout(removeToast, 4000);
+    
+    toast.addEventListener('click', () => {
+        removeToast();
+    });
 }
 
 function showConfirmation(msg) {
@@ -69,16 +109,17 @@ function showConfirmation(msg) {
 
 window.showToast = showToast;
 window.showConfirmation = showConfirmation;
-// тут ошибка была
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
         
-        onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+        const userDocRef = doc(db, "users", user.uid);
+        onSnapshot(userDocRef, (docSnap) => {
             if(docSnap.exists()) {
                 currentUserData = docSnap.data();
                 if(currentUserData.isBanned) {
-                    showToast("Ваш аккаунт заблокирован.");
+                    showToast("Ваш аккаунт заблокирован.", 'error');
                     signOut(auth);
                     return;
                 }
@@ -93,6 +134,10 @@ onAuthStateChanged(auth, async (user) => {
         currentUserData = null;
         document.getElementById('navbar').classList.add('hidden');
         router('auth');
+        if (postsSnapshot) {
+            postsSnapshot();
+            postsSnapshot = null;
+        }
     }
     setTimeout(() => feather.replace(), 100);
 });
@@ -111,14 +156,14 @@ window.register = async () => {
             lastPostTimestamp: serverTimestamp(), 
             createdAt: serverTimestamp()
         });
-        showToast("Аккаунт создан! Пожалуйста, войдите.");
-    } catch (e) { showToast("Ошибка: " + e.message); }
+        showToast("Аккаунт создан! Пожалуйста, войдите.", 'success');
+    } catch (e) { showToast("Ошибка: " + e.message,'error'); }
 };
 
 window.login = async () => {
     try {
         await signInWithEmailAndPassword(auth, document.getElementById('email').value, document.getElementById('password').value);
-    } catch (e) { showToast("Ошибка входа."); }
+    } catch (e) { showToast("Ошибка входа.",'error'); }
 };
 
 window.logout = () => signOut(auth);
@@ -129,9 +174,9 @@ window.deleteMyAccount = async () => {
         const uid = currentUser.uid;
         await deleteDoc(doc(db, "users", uid));
         await deleteUser(currentUser);
-        showToast("Аккаунт удален.");
+        showToast("Аккаунт удален.", 'success');
     } catch (e) {
-        showToast("Ошибка. Пожалуйста, перезалогиньтесь и попробуйте снова.");
+        showToast("Ошибка. Пожалуйста, перезалогиньтесь и попробуйте снова.",'error');
     }
 };
 
@@ -141,22 +186,44 @@ async function getAuthorData(uid) {
 }
 
 function loadFeed() {
-    const q = query(collection(db, "posts"), orderBy("timestamp", "desc"), limit(50));
-    onSnapshot(q, async (snapshot) => {
-        const container = document.getElementById('posts-container');
-        container.innerHTML = "";
-        
-        const postPromises = snapshot.docs.map(async docSnap => {
-            const post = docSnap.data();
-            const pid = docSnap.id;
-            const authorData = await getAuthorData(post.uid);
-            return renderPost(pid, post, authorData);
-        });
+    const container = document.getElementById('posts-container');
+    const loadingEl = document.getElementById('feed-loading');
+    loadingEl.classList.remove('hidden');
 
-        const renderedPosts = await Promise.all(postPromises);
-        renderedPosts.forEach(postEl => container.appendChild(postEl));
-        setTimeout(() => feather.replace(), 100);
-        onSearchInput();
+    if (postsSnapshot) {
+        postsSnapshot();
+    }
+    
+    const q = query(collection(db, "posts"), orderBy("timestamp", "desc"), limit(50));
+    
+    postsSnapshot = onSnapshot(q, async (snapshot) => {
+        loadingEl.classList.add('hidden');
+        
+        const existingPosts = container.querySelectorAll('.post-card');
+        existingPosts.forEach(post => post.classList.add('hiding'));
+        
+        setTimeout(() => {
+            container.innerHTML = "";
+            
+            const postPromises = snapshot.docs.map(async (docSnap, index) => {
+                const post = docSnap.data();
+                const pid = docSnap.id;
+                const authorData = await getAuthorData(post.uid);
+                return renderPost(pid, post, authorData);
+            });
+
+            Promise.all(postPromises).then(renderedPosts => {
+                renderedPosts.forEach(postEl => {
+                    container.appendChild(postEl);
+                    setTimeout(() => {
+                        postEl.classList.add('showing');
+                    }, 50);
+                });
+                
+                setTimeout(() => feather.replace(), 100);
+                onSearchInput();
+            });
+        }, 300);
     });
 }
 
@@ -164,13 +231,21 @@ window.onSearchInput = () => {
     const query = document.getElementById('search-input').value.toLowerCase();
     const posts = document.querySelectorAll('.post-card');
     
-    posts.forEach(card => {
+    posts.forEach((card, index) => {
         const content = card.dataset.searchContent || "";
         
         if (content.includes(query)) {
             card.style.display = "block";
+            card.classList.remove('hiding');
+            card.classList.add('showing');
         } else {
-            card.style.display = "none";
+            card.classList.remove('showing');
+            card.classList.add('hiding');
+            setTimeout(() => {
+                if (card.classList.contains('hiding')) {
+                    card.style.display = "none";
+                }
+            }, 300);
         }
     });
 }
@@ -200,7 +275,6 @@ function renderPost(pid, post, authorData) {
                 ${escapeHtml(post.author)}
                 ${isAuthorAdmin ? '<span class="admin-checkmark"><i data-feather="check" class="w-3 h-3"></i></span>' : ''} 
             </span>
-            <span class="post-date"><i data-feather="clock" class="w-3 h-3 mr-1"></i>${post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString() : '...'}</span>
         </div>
     `;
 
@@ -209,7 +283,7 @@ function renderPost(pid, post, authorData) {
 
     div.appendChild(headerDiv);
     
-    let contentHtml = `<div class="post-content">${escapeHtml(post.text)}</div>`;
+    let contentHtml = `  <span class="post-date"><i data-feather="clock" class="w-3 h-3 mr-1"></i>${post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString() : '...'}</span><div class="post-content">${escapeHtml(post.text)}</div>`;
     if(post.img) {
         contentHtml += `<img src="${escapeHtml(post.img)}" class="post-img" onerror="this.style.display='none'">`;
     }
@@ -234,7 +308,7 @@ window.createPost = async () => {
     if (currentUserData?.isBanned) {
         publishButton.disabled = false;
         publishButton.innerHTML = '<i data-feather="send" class="w-4 h-4 mr-2"></i>Опубликовать';
-        return showToast("Вы забанены!");
+        return showToast("Вы забанены!", 'error');
     }
 
     const text = document.getElementById('post-text').value;
@@ -243,7 +317,7 @@ window.createPost = async () => {
     if (!text.trim()) {
         publishButton.disabled = false;
         publishButton.innerHTML = '<i data-feather="send" class="w-4 h-4 mr-2"></i>Опубликовать';
-        return showToast("Напишите хоть что-то.");
+        return showToast("Напишите хоть что-то.", 'warning');
     }
 
     try {
@@ -268,12 +342,12 @@ window.createPost = async () => {
         publishButton.innerHTML = '<i data-feather="send" class="w-4 h-4 mr-2"></i>Опубликовать';
         
         router('feed');
-        showToast("Опубликовано!");
+        showToast("Опубликовано!", 'success');
     } catch (e) {
         publishButton.disabled = false; 
         publishButton.innerHTML = '<i data-feather="send" class="w-4 h-4 mr-2"></i>Опубликовать';
         
-        showToast("Ошибка: Возможно, вы постите слишком часто (Rate Limited) или нарушили правила. " + e.message);
+        showToast("Ошибка: Возможно, вы постите слишком часто (Rate Limited) или нарушили правила. " + e.message, 'error');
     }
 };
 
@@ -281,8 +355,8 @@ window.deletePost = async (id) => {
     if(!(await showConfirmation("Удалить пост?"))) return;
     try {
         await deleteDoc(doc(db, "posts", id));
-        showToast("Пост удален.");
-    } catch(e) { showToast("Нет прав для удаления."); }
+        showToast("Пост удален.", 'success');
+    } catch(e) { showToast("Нет прав для удаления.", 'error'); }
 };
 
 window.updateProfileData = async () => {
@@ -294,14 +368,18 @@ window.updateProfileData = async () => {
         displayName: name,
         photoURL: photo
     });
-    showToast("Профиль сохранен.");
+    showToast("Профиль сохранен.", 'success');
 };
 
 let currentViewingUid = null;
+let userPostsSnapshot = null;
 
 window.openUserProfile = async (uid) => {
     currentViewingUid = uid;
     router('user-profile');
+    if (userPostsSnapshot) {
+        userPostsSnapshot();
+    }
     
     const container = document.getElementById('user-posts-container');
     container.innerHTML = '<div class="text-center py-8"><i data-feather="loader" class="w-6 h-6 text-purple-600 animate-spin"></i></div>';
@@ -321,7 +399,7 @@ window.openUserProfile = async (uid) => {
     
     const checkmarkEl = document.getElementById('up-checkmark');
     if (data.isAdmin) {
-        checkmarkEl.style.display = 'inline-block';
+        checkmarkEl.style.display = 'inline-flex';
     } else {
         checkmarkEl.style.display = 'none';
     }
@@ -337,18 +415,29 @@ window.openUserProfile = async (uid) => {
     }
 
     const q = query(collection(db, "posts"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(20));
-    onSnapshot(q, (snap) => {
-          const postPromises = snap.docs.map(async docSnap => {
+    
+    userPostsSnapshot = onSnapshot(q, (snap) => {
+        container.innerHTML = '';
+        
+        if (snap.empty) {
+            container.innerHTML = '<p class="text-center text-gray-500 py-8"><i data-feather="inbox" class="w-5 h-5 mr-2"></i>Постов пока нет.</p>';
+            setTimeout(() => feather.replace(), 100);
+            return;
+        }
+        
+        const postPromises = snap.docs.map(async docSnap => {
             const post = docSnap.data();
             const pid = docSnap.id;
             return renderPost(pid, post, data);
         });
         
         Promise.all(postPromises).then(renderedPosts => {
-            container.innerHTML = '';
-            renderedPosts.forEach(postEl => container.appendChild(postEl));
-            if (renderedPosts.length === 0) container.innerHTML = '<p class="text-center text-gray-500 py-8"><i data-feather="inbox" class="w-5 h-5 mr-2"></i>Постов пока нет.</p>';
-            
+            renderedPosts.forEach((postEl, index) => {
+                setTimeout(() => {
+                    container.appendChild(postEl);
+                    postEl.classList.add('showing');
+                }, index * 50);
+            });
             setTimeout(() => feather.replace(), 100);
         });
     });
@@ -357,7 +446,7 @@ window.openUserProfile = async (uid) => {
 window.adminBanUser = async () => {
     if(!(await showConfirmation("Забанить пользователя навсегда?"))) return;
     await updateDoc(doc(db, "users", currentViewingUid), { isBanned: true, mutedUntil: null });
-    showToast("Пользователь забанен.");
+    showToast("Пользователь забанен.", 'success');
     openUserProfile(currentViewingUid);
 };
 
@@ -367,13 +456,37 @@ window.adminMuteUser = async () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     await updateDoc(doc(db, "users", currentViewingUid), { mutedUntil: tomorrow });
-    showToast("Мут выдан на 24 часа.");
+    showToast("Мут выдан на 24 часа.", 'success');
 };
 
 window.router = (view) => {
     document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
     const el = document.getElementById(view + (view.endsWith('view') ? '' : '-view'));
     if(el) el.classList.add('active');
+
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+
+    if(view === 'feed') {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            if (link.textContent.includes('Лента') || link.closest('button')?.onclick?.toString().includes('feed')) {
+                link.classList.add('active');
+            }
+        });
+    } else if(view === 'create') {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            if (link.textContent.includes('Создать') || link.closest('button')?.onclick?.toString().includes('create')) {
+                link.classList.add('active');
+            }
+        });
+    } else if(view === 'settings') {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            if (link.textContent.includes('Настройки') || link.closest('button')?.onclick?.toString().includes('settings')) {
+                link.classList.add('active');
+            }
+        });
+    }
 
     if(view === 'settings') {
         document.getElementById('set-name').value = currentUser.displayName || "";
