@@ -283,11 +283,29 @@ function renderPost(pid, post, authorData) {
 
     div.appendChild(headerDiv);
     
-    let contentHtml = `  <span class="post-date"><i data-feather="clock" class="w-3 h-3 mr-1"></i>${post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString() : '...'}</span><div class="post-content">${escapeHtml(post.text)}</div>`;
+    const dateContainer = document.createElement('div');
+    dateContainer.className = 'post-date-container';
+    dateContainer.innerHTML = `<i data-feather="clock" class="w-3 h-3"></i>${post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString() : '...'}`;
+
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'post-content-container';
+    
+    contentContainer.appendChild(dateContainer);
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'post-content';
+    textDiv.textContent = escapeHtml(post.text);
+    contentContainer.appendChild(textDiv);
+
     if(post.img) {
-        contentHtml += `<img src="${escapeHtml(post.img)}" class="post-img" onerror="this.style.display='none'">`;
+        const imgElement = document.createElement('img');
+        imgElement.src = escapeHtml(post.img);
+        imgElement.className = 'post-img';
+        imgElement.onerror = () => { imgElement.style.display = 'none'; };
+        contentContainer.appendChild(imgElement);
     }
-    div.innerHTML += contentHtml; 
+    
+    div.appendChild(contentContainer);
 
     if (isOwner || isAdmin) {
         div.innerHTML += `<div style="text-align:right; margin-top:10px;">
