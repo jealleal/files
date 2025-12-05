@@ -1,27 +1,33 @@
 :root {
     --bg-color: #f0f2f5;
     --card-bg: #ffffff;
-    --primary: #a855f7;
-    --primary-dark: #9333ea;
-    --accent: #a855f7;
+    --primary: #111827;
+    --primary-dark: #111827;
+    --accent: #111827;
     --danger: #dc2626;
     --text-main: #1f2937;
     --text-sec: #6b7280;
     --border-color: #e5e7eb;
     --hover-bg: #f9fafb;
+    --checkmark-bg: #111827;
+    --checkmark-color: #ffffff;
+    --checkmark-border: #111827;
 }
 
 .dark {
     --bg-color: #111827;
     --card-bg: #1f2937;
-    --primary: #a855f7;
-    --primary-dark: #c084fc;
-    --accent: #a855f7;
+    --primary: #ffffff;
+    --primary-dark: #f3f4f6;
+    --accent: #ffffff;
     --danger: #dc2626;
     --text-main: #f3f4f6;
     --text-sec: #9ca3af;
     --border-color: #374151;
     --hover-bg: #374151;
+    --checkmark-bg: #f3f4f6;
+    --checkmark-color: #111827;
+    --checkmark-border: #f3f4f6;
 }
 
 body {
@@ -41,7 +47,18 @@ body {
 .view.active {
     display: block;
 }
+.post-date-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+}
 
+.post-content-container {
+    margin-top: 8px;
+}
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
@@ -121,29 +138,88 @@ body {
     width: 1rem;
     height: 1rem;
     border-radius: 50%;
-    background: var(--primary);
+    background: var(--checkmark-bg);
+    color: var(--checkmark-color);
     margin-left: 0.3rem;
     flex-shrink: 0;
     vertical-align: middle;
+    border: 1px solid var(--checkmark-border);
+    font-size: 0.7rem;
+    font-weight: bold;
 }
 
 .toast {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #4c1d95 0%, #2d1b69 100%);
     color: white;
-    padding: 0.75rem 1.5rem;
-    border-radius: 2rem;
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(76, 29, 149, 0.3), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 0 15px rgba(124, 58, 237, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    max-width: 350px;
+    z-index: 9999;
     opacity: 0;
-    transform: translateY(-20px);
-    transition: all 0.3s ease;
-    pointer-events: auto;
+    transform: translateY(-20px) scale(0.95);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
 }
 
 .toast.show {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+}
+
+.toast i {
+    color: #c4b5fd;
+    filter: drop-shadow(0 0 4px rgba(196, 181, 253, 0.5));
+}
+
+@keyframes toastIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    70% {
+        transform: translateY(5px) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.toast.show {
+    animation: toastIn 0.5s forwards;
+}
+
+@keyframes toastOut {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+}
+
+@media (max-width: 640px) {
+    .toast {
+        left: 20px;
+        right: 20px;
+        max-width: none;
+        top: 10px;
+    }
 }
 
 .modal-overlay {
@@ -217,35 +293,4 @@ input:focus, textarea:focus {
         right: 1rem;
         bottom: 1rem;
     }
-}
-
-/* хромиум вроде поддерживает хз */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: var(--bg-color);
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--primary);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--primary-dark);
-}
-.loading {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(168, 85, 247, 0.3);
-    border-radius: 50%;
-    border-top-color: var(--primary);
-    animation: spin 1s ease-in-out infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
 }
